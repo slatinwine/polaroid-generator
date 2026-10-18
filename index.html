@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拍立得相纸生成器</title>
+<style>
+  :root {
+    --ink: #2b2b2b;
+    --paper: #f7f6f2;
+    --accent: #c0392b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 28px;
+  }
+  .layout {
+    display: flex;
+    gap: 48px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+  }
+  /* 左侧：画布预览区 */
+  .stage {
+    width: 400px;
+    min-height: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  canvas { display: block; max-width: 100%; }
+  /* 右侧：控制面板 */
+  .panel {
+    width: 300px;
+    background: #fff;
+    border: 1px solid #e6e4de;
+    border-radius: 12px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .panel h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #888;
+    letter-spacing: 1px;
+  }
+  .drop {
+    border: 2px dashed #d5d2ca;
+    border-radius: 10px;
+    padding: 22px 12px;
+    text-align: center;
+    font-size: 13px;
+    color: #999;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+  }
+  .drop:hover, .drop.over {
+    border-color: var(--accent);
+    background: #fdf5f4;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 13px; color: #666; }
+  input[type="text"] {
+    border: 1px solid #e0ddd6;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+    outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  input[type="range"] { accent-color: var(--accent); }
+  .row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .swatch {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #ddd;
+    cursor: pointer;
+  }
+  .swatch.active { box-shadow: 0 0 0 2px var(--accent); }
+  .btn {
+    border: none;
+    border-radius: 8px;
+    padding: 11px 0;
+    font-size: 14px;
+    cursor: pointer;
+    transition: opacity .2s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn-primary { background: var(--ink); color: #fff; }
+  .btn-accent { background: var(--accent); color: #fff; }
+  .hint { font-size: 12px; color: #bbb; text-align: center; }
+  @media (max-width: 820px) {
+    .layout { flex-direction: column; align-items: center; }
+    .stage { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<h1>拍立得相纸生成器</h1>
+<p class="subtitle">上传照片，生成经典 Polaroid 相纸风格 · 可下载保存</p>
+
+<div class="layout">
+  <!-- 预览区 -->
+  <div class="stage">
+    <canvas id="canvas" width="904" height="1064"></canvas>
+  </div>
+
+  <!-- 控制面板 -->
+  <div class="panel">
+    <h2>照片</h2>
+    <div class="drop" id="drop">点击或拖拽图片到这里<br>（也支持粘贴截图）</div>
+    <input type="file" id="file" accept="image/*" hidden>
+
+    <h2>文字</h2>
+    <div class="field">
+      <label>相纸手写字（可留空）</label>
+      <input type="text" id="caption" maxlength="40" placeholder="写点什么…">
+    </div>
+
+    <h2>效果</h2>
+    <div class="field">
+      <label>旋转角度：<span id="rotVal">0</span>°</label>
+      <input type="range" id="rot" min="-15" max="15" value="0" step="1">
+    </div>
+    <div class="field">
+      <label>复古老化程度：<span id="fadeVal">30</span>%</label>
+      <input type="range" id="fade" min="0" max="100" value="30" step="5">
+    </div>
+    <div class="field">
+      <label>相纸颜色</label>
+      <div class="row" id="swatches">
+        <div class="swatch active" data-c="#fdfdfa" style="background:#fdfdfa"></div>
+        <div class="swatch" data-c="#f5f0e1" style="background:#f5f0e1"></div>
+        <div class="swatch" data-c="#efe6d5" style="background:#efe6d5"></div>
+        <div class="swatch" data-c="#e8e3da" style="background:#e8e3da"></div>
+      </div>
+    </div>
+
+    <h2>导出</h2>
+    <button class="btn btn-accent" id="download">下载 PNG</button>
+    <button class="btn btn-primary" id="shuffle">随机来一张 🎲</button>
+    <p class="hint">图片仅在本机处理，不会上传</p>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let photo = null;          // Image 对象
+let frameColor = '#fdfdfa';
+
+const $ = id => document.getElementById(id);
+
+/* ---------- 尺寸定义（拍立得经典比例：总宽 800，照片区 3:3.05，底边距更大） ---------- */
+const W = 800, H = 960;
+const M = 52;                      // 画布四周透明边距，给投影留渲染空间
+const PAD = 46;                    // 左右 & 上边距
+const IMG_W = W - PAD * 2;         // 照片宽 708
+const IMG_H = 640;                 // 照片高（约 3 : 2.7）
+const CAP_H = H - PAD - IMG_H - PAD; // 底部留白
+
+/* ---------- 图片载入 ---------- */
+function loadFromFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => { photo = img; render(); URL.revokeObjectURL(url); };
+  img.src = url;
+}
+
+$('file').addEventListener('change', e => loadFromFile(e.target.files[0]));
+
+const drop = $('drop');
+drop.addEventListener('click', () => $('file').click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('over');
+  loadFromFile(e.dataTransfer.files[0]);
+});
+document.addEventListener('paste', e => {
+  const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (item) loadFromFile(item.getAsFile());
+});
+
+/* ---------- 复古滤镜：整体降饱和 + 暖色偏移 + 轻微提亮阴影 ---------- */
+function applyFade(strength) { // 0~1
+  const s = strength;
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  // 半透明暖色罩（降饱和感）
+  ctx.globalAlpha = 0.12 * s;
+  ctx.fillStyle = '#d8c49a';
+  ctx.fillRect(0, 0, W, H);
+  // 轻微褪色白罩
+  ctx.globalAlpha = 0.10 * s;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+/* ---------- 主渲染 ---------- */
+function render() {
+  // 背景（工作台底色，导出时不包含——导出只画相纸本身）
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(M, M); // 相纸居中，四周留投影空间
+
+  // 相纸底（较大圆角 + 双层投影，更像实体相纸叠在桌面上）
+  ctx.save();
+  // 第一层：远投影（柔和、扩散大）
+  ctx.shadowColor = 'rgba(0,0,0,0.32)';
+  ctx.shadowBlur = 48;
+  ctx.shadowOffsetY = 24;
+  roundRect(0, 0, W, H, 26);
+  ctx.fillStyle = frameColor;
+  ctx.fill();
+  // 第二层：近投影（紧贴边缘，轮廓感）
+  ctx.shadowColor = 'rgba(0,0,0,0.20)';
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 5;
+  roundRect(0, 0, W, H, 26);
+  ctx.fill();
+  ctx.restore();
+
+  // 照片区底色
+  roundRect(PAD, PAD, IMG_W, IMG_H, 10);
+  ctx.save();
+  ctx.clip();
+
+  if (photo) {
+    // cover 裁剪
+    const scale = Math.max(IMG_W / photo.width, IMG_H / photo.height);
+    const dw = photo.width * scale, dh = photo.height * scale;
+    ctx.drawImage(photo, (IMG_W - dw) / 2 + PAD, (IMG_H - dh) / 2 + PAD, dw, dh);
+    applyFade($('fade').value / 100);
+  } else {
+    // 占位
+    ctx.fillStyle = '#ddd8ce';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#aaa49a';
+    ctx.font = '28px "PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('照片预览', W / 2, H / 2 - 10);
+    ctx.font = '18px sans-serif';
+    ctx.fillText('上传图片后开始生成', W / 2, H / 2 + 24);
+  }
+  ctx.restore();
+
+  // 照片边缘细描
+  roundRect(PAD, PAD, IMG_W, IMG_H, 10);
+  ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 手写文字（用手写感字体渲染，模拟马克笔）
+  const text = $('caption').value.trim();
+  if (text) {
+    ctx.save();
+    ctx.font = 'italic 34px "Segoe Script","Comic Sans MS","Kaiti SC","KaiTi",cursive';
+    ctx.fillStyle = '#3a3a3a';
+    ctx.textAlign = 'center';
+    ctx.translate(W / 2, PAD + IMG_H + CAP_H / 2 + 4);
+    ctx.rotate((Math.random() * 0 - 0) ); // 文字保持水平，随相纸整体旋转
+    ctx.fillText(text, 0, 0, IMG_W - 40);
+    ctx.restore();
+  }
+
+  ctx.restore(); // 结束 translate(M, M)
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/* ---------- 页面上的旋转展示（仅 CSS 预览，导出为正片） ---------- */
+function updateTilt() {
+  const deg = $('rot').value;
+  $('rotVal').textContent = deg;
+  canvas.style.transform = `rotate(${deg}deg)`;
+  canvas.style.transition = 'transform .2s';
+}
+
+/* ---------- 事件绑定 ---------- */
+$('rot').addEventListener('input', updateTilt);
+$('fade').addEventListener('input', () => { $('fadeVal').textContent = $('fade').value; render(); });
+$('caption').addEventListener('input', render);
+
+document.querySelectorAll('.swatch').forEach(s => {
+  s.addEventListener('click', () => {
+    document.querySelectorAll('.swatch').forEach(x => x.classList.remove('active'));
+    s.classList.add('active');
+    frameColor = s.dataset.c;
+    render();
+  });
+});
+
+$('shuffle').addEventListener('click', () => {
+  $('rot').value = Math.floor(Math.random() * 21) - 10;
+  $('fade').value = Math.floor(Math.random() * 8) * 5;
+  $('fadeVal').textContent = $('fade').value;
+  updateTilt();
+  render();
+});
+
+/* ---------- 下载：导出带旋转的最终图 ---------- */
+$('download').addEventListener('click', () => {
+  const deg = parseFloat($('rot').value);
+  const rad = deg * Math.PI / 180;
+
+  // 旋转后所需画布尺寸（含透明边距，阴影随透明通道一起导出）
+  const cw = canvas.width, ch = canvas.height;
+  const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+  const outW = Math.round(cw * cos + ch * sin);
+  const outH = Math.round(cw * sin + ch * cos);
+  const scale = 2; // 2 倍导出更清晰
+
+  const out = document.createElement('canvas');
+  out.width = outW * scale;
+  out.height = outH * scale;
+  const octx = out.getContext('2d');
+  octx.scale(scale, scale);
+
+  octx.translate(outW / 2, outH / 2);
+  octx.rotate(rad);
+
+  // 导出时额外叠一层基于轮廓的投影，确保下载图阴影清晰可见
+  // 第一遍：带阴影绘制（从相纸轮廓生成投影）
+  octx.save();
+  octx.shadowColor = 'rgba(0,0,0,0.38)';
+  octx.shadowBlur = 26;
+  octx.shadowOffsetY = 14;
+  octx.drawImage(canvas, -cw / 2, -ch / 2);
+  octx.restore();
+  // 第二遍：正常绘制相纸本体，盖在投影之上
+  octx.drawImage(canvas, -cw / 2, -ch / 2);
+
+  const a = document.createElement('a');
+  a.download = 'polaroid-' + Date.now() + '.png';
+  a.href = out.toDataURL('image/png');
+  a.click();
+});
+
+/* ---------- 初始 ---------- */
+updateTilt();
+render();
+</script>
+</body>
+</html>
